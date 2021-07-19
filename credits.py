@@ -17,6 +17,7 @@ import sys
 import plistlib
 import re
 import codecs
+import io
 from optparse import OptionParser
 from optparse import Option, OptionValueError
 from copy import deepcopy
@@ -74,6 +75,13 @@ def main(_):
                       metavar='include_tests',
                       default=False,
                       help='include files in the `Tests` directory for unit testing')
+    parser.add_option('-m', '--mode',
+                      type="string",
+                      dest='mode',
+                      metavar='mode',
+                      default='plist',
+                      help='mode of generation plist or text. Defaults to plist. ')
+
     if len(sys.argv) == 1:
         parser.parse_args(['--help'])
 
@@ -85,16 +93,28 @@ def main(_):
             print "Error: Source path does not exist: %s" % path
             sys.exit(2)
 
-    if not options.output_file.endswith('.plist'):
+    mode = os.path.isdir(options.mode)
+
+    if not options.output_file.endswith('.plist') and mode == 'plist':
         print("Error: Outputfile must end in .plist")
         sys.exit(2)
 
-    plist = plist_from_dirs(
-        options.input_path,
-        options.excludes,
-        options.include_tests
-    )
-    plistlib.writePlist(plist, options.output_file)
+    if mode == 'plist':
+        data = plist_from_dirs(
+            options.input_path,
+            options.excludes,
+            options.include_tests
+        )
+        plistlib.writePlist(data, options.output_file)
+    else:
+        data = txt_from_dirs(
+            options.input_path,
+            options.excludes,
+            options.include_tests
+        )
+        file = io.open(options.output_file, 'w', encoding='utf8')
+        file.write(data)
+        file.close()
     return 0
 
 
@@ -112,7 +132,25 @@ def plist_from_dirs(directories, excludes, include_tests):
             plist['PreferenceSpecifiers'].append(license_dict)
 
     plist['PreferenceSpecifiers'] = sorted(plist['PreferenceSpecifiers'], key=lambda x: x['Title'])
+
     return plist
+
+def txt_from_dirs(directory, excludes, include_tests):
+    """
+    Converts the plist to text and returns that
+    """
+    plist = plist_from_dirs(directory, excludes, include_tests)
+
+    string_representation = ""
+    for plist in sorted(plist['PreferenceSpecifiers'], key=lambda x: x['Title']):
+        string_representation += plist["Title"]
+        string_representation += "\n\n"
+        string_representation += "----"
+        string_representation += "\n\n"
+        string_representation += plist["FooterText"]
+        string_representation += "\n\n"
+
+    return string_representation
 
 
 def license_paths_from_dir(directory):
